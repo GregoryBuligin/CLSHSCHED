@@ -1,0 +1,29 @@
+syntax = "proto3";
+package shsched;
+
+service Shsched {
+        rpc GetInfo(Empty) returns (NodeInfo) {};
+        rpc Exec(stream Chunk) returns (ExecResponse) {};
+        rpc Ret(ExecOutput) returns (Empty) {};
+}
+
+// rpc GetInfo(Empty) returns (NodeInfo) {};
+message Empty {}
+
+message NodeInfo {
+        int64 CPU = 1;
+}
+
+// rpc Exec(Chunk) returns (ExecResponse) {};
+message Chunk {
+        bytes Content = 1;
+}
+
+message ExecResponse {
+        string Message = 1;
+}
+
+// rpc Ret(ExecOutput) returns (Empty) {};
+message ExecOutput {
+        string Output = 1;
+}

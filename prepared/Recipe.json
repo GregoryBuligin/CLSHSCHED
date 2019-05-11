@@ -1,0 +1,4 @@
+{
+    "execFile": "test.py",
+    "script": "python3 test.py"
+}
