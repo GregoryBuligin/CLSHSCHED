@@ -48,9 +48,9 @@ func ExternalIP() (string, error) {
 
 type Hosts map[string][]uint16
 
-func Scan(ctx context.Context, myIP string) (Hosts, error) {
+func Scan(ctx context.Context, myIP string, myPort uint16) (Hosts, error) {
 	scanner, err := nmap.NewScanner(
-		nmap.WithTargets("192.168.1.0/24"),
+		nmap.WithTargets("127.0.0.1", "192.168.1.0/24"),
 		nmap.WithPorts("8000,8001,8002,8003"),
 		nmap.WithContext(ctx),
 	)
@@ -73,22 +73,25 @@ func Scan(ctx context.Context, myIP string) (Hosts, error) {
 		// fmt.Printf("Host %q:\n", host.Addresses[0])
 
 		hostAddress := fmt.Sprintf("%s", host.Addresses[0])
-		// if hostAddress == myIP {
-		// 	continue
+		// if (hostAddress == myIP) {
+		// continue
 		// }
 
 		ports := []uint16{}
 
 		for _, port := range host.Ports {
-			// fmt.Printf(
-			// 	"\tPort %d/%s %s %s\n",
-			// 	port.ID,
-			// 	port.Protocol,
-			// 	port.State,
-			// 	port.Service.Name,
-			// )
+			fmt.Printf(
+				"\tPort %d/%s %s %s\n",
+				port.ID,
+				port.Protocol,
+				port.State,
+				port.Service.Name,
+			)
 			if port.Status() == nmap.Open {
-				ports = append(ports, port.ID)
+				if (hostAddress == myIP) && (port.ID == myPort) {
+				} else {
+					ports = append(ports, port.ID)
+				}
 			}
 		}
 

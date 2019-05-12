@@ -25,7 +25,7 @@ func main() {
 	}
 
 	client, err := shsched.NewClient(&shsched.ClientConfig{
-		Address: fmt.Sprintf("%s:%d", myHost, 8001),
+		Address: fmt.Sprintf("%s:%d", myHost, 8000),
 	})
 	if err != nil {
 		log.Fatalf("NewClient: %v", err)

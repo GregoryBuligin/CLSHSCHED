@@ -49,7 +49,16 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		return nil, err
 	}
 
-	networkHosts, err := netscanner.Scan(context.Background(), myIP)
+	myPort, err := strconv.Atoi(cfg.Port)
+	if err != nil {
+		return nil, err
+	}
+
+	networkHosts, err := netscanner.Scan(
+		context.Background(),
+		myIP,
+		uint16(myPort),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -82,10 +91,12 @@ func (s *Server) getNewClient() (client *Client, err error) {
 	var address string
 	var port string
 
+	// panic(len(s.networkHosts))
+
 	if len(s.networkHosts) > 0 {
 		for k, v := range s.networkHosts {
-			fmt.Println(k, s.networkIP)
-			panic(k == s.networkIP)
+			// fmt.Println(k, s.networkIP)
+			// panic(k == s.networkIP)
 			if k == s.networkIP {
 				continue
 			}
@@ -97,7 +108,8 @@ func (s *Server) getNewClient() (client *Client, err error) {
 				continue
 			}
 
-			delete(s.networkHosts, k)
+			// !!!!!!!!!!!!!
+			// delete(s.networkHosts, k)
 			break
 		}
 	} else {
