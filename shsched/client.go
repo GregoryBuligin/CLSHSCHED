@@ -1,4 +1,4 @@
-package client
+package shsched
 
 import (
 	"context"
@@ -12,9 +12,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/rs/zerolog"
-
-	types "shsched/shsched"
-	shsched "shsched/shsched/server"
 )
 
 const (
@@ -22,15 +19,18 @@ const (
 )
 
 type ClientConfig struct {
-	Address string
+	Address    string
+	ServerPort string
 }
 
 type Client struct {
 	address    string
-	client     shsched.ShschedClient
+	client     ShschedClient
 	connection *grpc.ClientConn
 	chunkSize  uint
 	logger     *zerolog.Logger
+
+	serverPort string
 }
 
 func NewClient(cfg *ClientConfig) (*Client, error) {
@@ -46,7 +46,7 @@ func NewClient(cfg *ClientConfig) (*Client, error) {
 	return &Client{
 		address:   cfg.Address,
 		chunkSize: 1 << 13,
-		client:    shsched.NewShschedClient(conn),
+		client:    NewShschedClient(conn),
 		logger:    &logger,
 	}, nil
 }
@@ -56,32 +56,18 @@ func (c Client) Close() error {
 	return c.connection.Close()
 }
 
-func (c *Client) GetInfo(ctx context.Context) (*shsched.NodeInfo, error) {
+func (c *Client) GetInfo(ctx context.Context) (*NodeInfo, error) {
 	c.logger.Debug().Msgf("call GetInfo")
-	return c.client.GetInfo(ctx, &shsched.Empty{})
+	return c.client.GetInfo(ctx, &Empty{})
 }
-
-// type Recipe struct {
-// 	ExecFilePath string `json:"execFilePath"`
-// 	Run          string `json:"run"`
-// }
 
 func (c *Client) Exec(
 	ctx context.Context,
 	recipeFilePathRaw string,
+	retAddress string,
 ) (err error) {
-	// recipe, err := os.Open(recipeFilePath)
-	// if err != nil {
-	// 	c.logger.Error().Err(err).Msg("Open recipeFilePath error")
-	// 	return err
-	// }
-	// defer recipe.Close()
 	recipeFilePath := filepath.Clean(recipeFilePathRaw)
 	recipeFileDir, _ := filepath.Split(recipeFilePath)
-	// if err != nil {
-	// 	return err
-	// }
-	// panic(recipeFileDir)
 
 	recipeFile, err := os.Open(recipeFilePath)
 	if err != nil {
@@ -95,12 +81,17 @@ func (c *Client) Exec(
 		return err
 	}
 
-	recipe := &types.Recipe{}
+	recipe := &Recipe{}
 	err = json.Unmarshal(recipeBytes, recipe)
 	if err != nil {
 		c.logger.Error().Err(err).Msg("Unmarshal recipeFile from JSON error")
 		return err
 	}
+
+	recipe.RetAddress = retAddress
+
+	// fmt.Println("recipe.RetAddress", recipe.RetAddress)
+	// panic("***")
 
 	file, err := os.Open(filepath.Join(recipeFileDir, recipe.ExecFile))
 	if err != nil {
@@ -109,22 +100,22 @@ func (c *Client) Exec(
 	}
 	defer file.Close()
 
-	// Open a stream-based connection with the
-	// gRPC server
+	// Open a stream-based connection with the gRPC server
 	stream, err := c.client.Exec(ctx)
 	if err != nil {
 		c.logger.Error().Err(err).Msg("Exec error")
 		return err
 	}
 
-	// Start timing the execution
-	// stats.StartedAt = time.Now()
-
-	// Prepare first chunk
+	newRecipeBytes, err := json.Marshal(recipe)
+	if err != nil {
+		c.logger.Error().Err(err).Msg("JSON Marshal error")
+		return err
+	}
 
 	// Send first chunk
-	err = stream.Send(&shsched.Chunk{
-		Content: recipeBytes,
+	err = stream.Send(&Chunk{
+		Content: newRecipeBytes,
 	})
 	if err != nil {
 		c.logger.Error().Err(err).Msg("send first chunk error")
@@ -149,7 +140,7 @@ func (c *Client) Exec(
 			return err
 		}
 
-		err = stream.Send(&shsched.Chunk{
+		err = stream.Send(&Chunk{
 			Content: buf[:n],
 		})
 		if err != nil {
@@ -158,11 +149,7 @@ func (c *Client) Exec(
 		}
 	}
 
-	// keep track of the end time so that we can take the elapsed
-	// time later
-	// stats.FinishedAt = time.Now()
-
-	// close
+	// Close stream
 	status, err := stream.CloseAndRecv()
 	if err != nil {
 		c.logger.Error().Err(err).Msg("Exec error")
@@ -171,4 +158,28 @@ func (c *Client) Exec(
 	fmt.Println("!!!", status.Message)
 
 	return nil
+}
+
+func (c *Client) SchedTask(
+	ctx context.Context,
+	recipeFilePathRaw string,
+) (*Empty, error) {
+	recipe := &RecipeMsg{
+		RecipeFilePath: recipeFilePathRaw,
+		Port:           c.serverPort,
+	}
+
+	fmt.Printf("%+v\n", recipe)
+
+	_, err := c.client.SchedTask(ctx, recipe)
+	if err != nil {
+		c.logger.Error().Err(err).Msg("SchedTask error")
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (c *Client) Ret(ctx context.Context, in *ExecOutput) (*Empty, error) {
+	return c.client.Ret(ctx, in)
 }

@@ -2,32 +2,44 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"time"
 
-	shschedClient "shsched/shsched/client"
-)
-
-const (
-	address = "localhost:8000"
+	"shsched/netscanner"
+	"shsched/shsched"
 )
 
 func main() {
-	// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	// defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
 
-	ctx := context.Background()
+	address, err := netscanner.ExternalIP()
+	if err != nil {
+		log.Fatalf("ExternalIP: %v", err)
+	}
 
-	client, err := shschedClient.NewClient(&shschedClient.ClientConfig{
-		Address: address,
+	myHost, _, err := netscanner.ScanMyIP(ctx, address)
+	if err != nil {
+		log.Fatalf("ScanMyIP: %v", err)
+	}
+
+	client, err := shsched.NewClient(&shsched.ClientConfig{
+		Address: fmt.Sprintf("%s:%d", myHost, 8001),
 	})
 	if err != nil {
 		log.Fatalf("NewClient: %v", err)
 	}
 
-	err = client.Exec(ctx, "prepared/Recipe.json")
+	_, err = client.SchedTask(context.Background(), "prepared/Recipe.json")
 	if err != nil {
-		log.Fatalf("GetInfo: %v", err)
+		log.Fatalf("SchedTask: %v", err)
 	}
+
+	// err = client.Exec(ctx, "prepared/Recipe.json")
+	// if err != nil {
+	// 	log.Fatalf("GetInfo: %v", err)
+	// }
 	// log.Printf("resp: %s", resp)
 
 	// resp, err := client.GetInfo(ctx)

@@ -1,46 +1,62 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"os"
 
-	"shsched/netscanner"
-	types "shsched/shsched"
-	shschedServer "shsched/shsched/server"
+	"shsched/shsched"
 )
 
-const port = "8000"
+// const port = "8000"
+
+const port = "8001"
 
 var semaphore = make(chan uint, 100)
 
 func main() {
-	netscanner.Scan()
+	// ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	// defer cancel()
+	// list, _ := netscanner.Scan(ctx)
+	// fmt.Printf("%+v\n", list)
+	// panic(list)
 
-	cfg := &shschedServer.ServerConfig{
+	cfg := &shsched.ServerConfig{
 		Port: port,
 	}
 
-	server := shschedServer.NewServer(cfg)
+	server, err := shsched.NewServer(cfg)
+	if err != nil {
+		log.Fatalf("%+v\n", err)
+	}
 
-	go func(server *shschedServer.Server) {
-		for task := range server.TaskChan {
-			semaphore <- 1
-			go func(task types.Task, semaphore chan uint) {
-				defer func() {
-					<-semaphore
-					os.RemoveAll(task.Dir)
-				}()
+	// panic(server.Port)
 
-				out, err := task.CMD.Output()
-				if err != nil {
-					panic(err)
-				}
-				// panic(string(out))
-				fmt.Println(string(out))
-			}(task, semaphore)
-		}
-	}(server)
+	go server.OutputWaiter()
+	go server.SelectTask()
+	go shsched.StartRunner(server, semaphore)
+
+	// go func() {
+	// 	time.Sleep(time.Second * 10)
+	// 	myHost, myFirstPost, err := netscanner.ScanMyIP(
+	// 		context.Background(),
+	// 		"127.0.0.1",
+	// 	)
+	// 	if err != nil {
+	// 		log.Fatalf("ScanMyIP: %v", err)
+	// 	}
+	//
+	// 	client, err := shsched.NewClient(&shsched.ClientConfig{
+	// 		Address:    fmt.Sprintf("%s:%d", myHost, myFirstPost),
+	// 		ServerPort: port,
+	// 	})
+	// 	if err != nil {
+	// 		log.Fatalf("NewClient: %v", err)
+	// 	}
+	//
+	// 	_, err = client.SchedTask(context.Background(), "prepared/Recipe.json")
+	// 	if err != nil {
+	// 		log.Fatalf("SchedTask: %v", err)
+	// 	}
+	// }()
 
 	if err := server.Serve(); err != nil {
 		log.Fatalf("failed to serve: %v", err)

@@ -6,4 +6,4 @@ run:
 
 .PHONY: protoc
 protoc:
-	protoc -I protobuf/ protobuf/shsched.proto --go_out=plugins=grpc:shsched/server
+	protoc -I protobuf/ protobuf/shsched.proto --go_out=plugins=grpc:shsched

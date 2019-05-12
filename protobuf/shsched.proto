@@ -3,15 +3,23 @@ package shsched;
 
 service Shsched {
         rpc GetInfo(Empty) returns (NodeInfo) {};
+        rpc SchedTask(RecipeMsg) returns (Empty) {};
         rpc Exec(stream Chunk) returns (ExecResponse) {};
         rpc Ret(ExecOutput) returns (Empty) {};
 }
 
-// rpc GetInfo(Empty) returns (NodeInfo) {};
+// Generic
 message Empty {}
 
+// rpc GetInfo(Empty) returns (NodeInfo) {};
 message NodeInfo {
         int64 CPU = 1;
+}
+
+// rpc SchedTask(RecipeMsg) returns (Empty) {};
+message RecipeMsg {
+        string RecipeFilePath = 1;
+        string Port = 2;
 }
 
 // rpc Exec(Chunk) returns (ExecResponse) {};
