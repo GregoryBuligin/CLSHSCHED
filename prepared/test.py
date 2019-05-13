@@ -7,4 +7,4 @@ def recur_fibo(n):
     else:
         return(recur_fibo(n-1) + recur_fibo(n-2))
 
-print(recur_fibo(random.randint(0, 40)))
+print(recur_fibo(random.randint(1, 35)))

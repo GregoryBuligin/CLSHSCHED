@@ -13,13 +13,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 
-	"github.com/rs/zerolog"
-
 	"shsched/netscanner"
+
+	"github.com/gammazero/deque"
+	"github.com/rs/zerolog"
 )
 
 type ServerConfig struct {
@@ -28,7 +30,9 @@ type ServerConfig struct {
 
 type Server struct {
 	networkIP    string
-	networkHosts netscanner.Hosts
+	networkHosts deque.Deque
+	// networkHostsChan chan netscanner.Hosts
+	ScanChan chan deque.Deque
 
 	Port                   string
 	server                 *grpc.Server
@@ -54,24 +58,40 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		return nil, err
 	}
 
-	networkHosts, err := netscanner.Scan(
-		context.Background(),
-		myIP,
-		uint16(myPort),
-	)
-	if err != nil {
-		return nil, err
-	}
+	scanChan := make(chan deque.Deque, 1)
 
-	if len(networkHosts) == 0 {
-		logger.Warn().Msg("running nodes not found!")
-	}
+	go func(scanChan chan deque.Deque, logger *zerolog.Logger) {
+		for {
+			time.Sleep(time.Minute * 1)
+			// time.Sleep(time.Second * 30)
 
-	fmt.Printf("!!!%+v!!!\n", len(networkHosts))
+			networkHosts, err := netscanner.Scan(
+				context.Background(),
+				myIP,
+				uint16(myPort),
+			)
+			if err != nil {
+				logger.Error().Err(err).Msg("netscanner.Scan")
+				// return nil, err
+			}
+
+			logger.Debug().Msgf(
+				"Hosts found: %d | %+v!!!\n",
+				networkHosts.Len(),
+				networkHosts,
+			)
+			if networkHosts.Len() == 0 {
+				logger.Warn().Msg("running nodes not found!")
+			} else {
+				scanChan <- *networkHosts
+			}
+		}
+	}(scanChan, &logger)
 
 	server := &Server{
 		networkIP:    myIP,
-		networkHosts: networkHosts,
+		networkHosts: deque.Deque{},
+		// networkHostsChan: make(chan netscanner.Hosts, 256),
 
 		Port:                   cfg.Port,
 		server:                 grpc.NewServer(),
@@ -79,10 +99,22 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		TaskChan:               make(chan Task, 100),
 		WaitTaskChan:           make(chan Input, 100),
 		CompleteTaskOutputChan: make(chan Output, 100),
+		ScanChan:               scanChan,
 		// Client:       client,
 	}
 
 	RegisterShschedServer(server.server, server)
+
+	go func(server *Server) {
+		for hosts := range server.ScanChan {
+			server.logger.Debug().Msg("refresh hosts")
+			server.networkHosts = hosts
+
+			// for k := range server.networkHosts {
+			// 	server.networkHostsChan <- server.networkHosts[k]
+			// }
+		}
+	}(server)
 
 	return server, nil
 }
@@ -92,34 +124,53 @@ func (s *Server) getNewClient() (client *Client, err error) {
 	var port string
 
 	// panic(len(s.networkHosts))
+	fmt.Printf("getNewClient: %+v --> %d\n", s.networkHosts, s.networkHosts.Len())
 
-	if len(s.networkHosts) > 0 {
-		for k, v := range s.networkHosts {
+	if s.networkHosts.Len() > 0 {
+		func() {
+			fmt.Println("HERE!!!")
+			host := (s.networkHosts.PopFront()).(netscanner.Host)
+			defer s.networkHosts.PushBack(host)
+
+			// for k, v := range s.networkHosts {
 			// fmt.Println(k, s.networkIP)
 			// panic(k == s.networkIP)
-			if k == s.networkIP {
-				continue
-			}
+			fmt.Printf("my IP: %+v ||| k: %s\n", s.networkIP, host.Address)
 
-			if len(v) > 0 {
-				address = k
-				port = strconv.Itoa(int(v[0]))
-			} else {
-				continue
-			}
+			if host.Address != s.networkIP {
+				if host.Ports.Len() > 0 {
+					address = host.Address
 
-			// !!!!!!!!!!!!!
-			// delete(s.networkHosts, k)
-			break
-		}
+					savePorts := []string{}
+
+					for host.Ports.Len() != 0 {
+						fmt.Println("CYCLE")
+						p := (host.Ports.PopFront()).(string)
+						savePorts = append(savePorts, p)
+
+						if p != s.Port {
+							port = p
+							break
+						}
+					}
+
+					for _, savePort := range savePorts {
+						host.Ports.PushBack(savePort)
+					}
+				}
+			}
+		}()
 	} else {
 		address = "127.0.0.1"
 		port = s.Port
 	}
 
+	fmt.Printf(">>>>>>>>>>>>> %s:%s\n", address, port)
+
 	client, err = NewClient(&ClientConfig{
 		Address:    fmt.Sprintf("%s:%s", address, port),
 		ServerPort: s.Port,
+		UseLogger:  true,
 	})
 	if err != nil {
 		return nil, err
@@ -246,23 +297,26 @@ func (s *Server) SchedTask(ctx context.Context, in *RecipeMsg) (*Empty, error) {
 
 func (s *Server) OutputWaiter() {
 	s.logger.Debug().Msg("run OutputWaiter")
-	for output := range s.CompleteTaskOutputChan {
-		client, err := s.getNewClient()
-		if err != nil {
-			s.logger.Error().Err(err).Msg("getNewClient error")
-			panic(err)
-		}
-		defer client.Close()
-		client.address = output.RetAddress
-		// panic(client.address)
+	for _ = range s.CompleteTaskOutputChan {
+		s.logger.Debug().Msg("USE>>> OutputWaiter")
+		fmt.Println("USE>>> OutputWaiter")
 
-		_, err = client.Ret(context.Background(), &ExecOutput{
-			Output: output.Output,
-		})
-		if err != nil {
-			s.logger.Error().Err(err).Msg("getNewClient error")
-			panic(err)
-		}
+		// client, err := s.getNewClient()
+		// if err != nil {
+		// 	s.logger.Error().Err(err).Msg("getNewClient error")
+		// 	panic(err)
+		// }
+		// defer client.Close()
+		// client.address = output.RetAddress
+		// // panic(client.address)
+		//
+		// _, err = client.Ret(context.Background(), &ExecOutput{
+		// 	Output: output.Output,
+		// })
+		// if err != nil {
+		// 	s.logger.Error().Err(err).Msg("getNewClient error")
+		// 	panic(err)
+		// }
 	}
 }
 
@@ -280,6 +334,9 @@ func (s *Server) SelectTask() (err error) {
 	// panic(">>>")
 
 	for task := range s.WaitTaskChan {
+		s.logger.Debug().Msg("USE>>> SelectTask")
+		fmt.Println("USE>>> SelectTask")
+
 		client, err := s.getNewClient()
 		if err != nil {
 			s.logger.Error().Err(err).Msg("getNewClient error")

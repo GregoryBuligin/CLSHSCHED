@@ -21,6 +21,7 @@ const (
 type ClientConfig struct {
 	Address    string
 	ServerPort string
+	UseLogger  bool
 }
 
 type Client struct {
@@ -40,18 +41,26 @@ func NewClient(cfg *ClientConfig) (*Client, error) {
 		return nil, err
 	}
 
-	logger := zerolog.New(os.Stderr).With().Str("role", "client").Timestamp().
+	var loggerOutput io.Writer
+	if cfg.UseLogger {
+		loggerOutput = os.Stderr
+	} else {
+		loggerOutput = ioutil.Discard
+	}
+
+	logger := zerolog.New(loggerOutput).With().Str("role", "client").Timestamp().
 		Caller().Logger()
 
 	return &Client{
-		address:   cfg.Address,
-		chunkSize: 1 << 13,
-		client:    NewShschedClient(conn),
-		logger:    &logger,
+		address:    cfg.Address,
+		chunkSize:  1 << 13,
+		connection: conn,
+		client:     NewShschedClient(conn),
+		logger:     &logger,
 	}, nil
 }
 
-func (c Client) Close() error {
+func (c *Client) Close() error {
 	c.logger.Info().Msgf("Close client connection")
 	return c.connection.Close()
 }

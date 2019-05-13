@@ -6,9 +6,11 @@ import (
 	"shsched/shsched"
 )
 
-// const port = "8000"
-
 const port = "8001"
+
+// const port = "8002"
+
+// const port = "8003"
 
 var semaphore = make(chan uint, 100)
 
@@ -30,7 +32,7 @@ func main() {
 
 	// panic(server.Port)
 
-	go server.OutputWaiter()
+	// go server.OutputWaiter()
 	go server.SelectTask()
 	go shsched.StartRunner(server, semaphore)
 

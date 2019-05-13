@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 
 	"github.com/Ullaakut/nmap"
+	"github.com/gammazero/deque"
 )
 
 func ExternalIP() (string, error) {
@@ -46,12 +48,18 @@ func ExternalIP() (string, error) {
 	return "", errors.New("are you connected to the network?")
 }
 
-type Hosts map[string][]uint16
+type Host struct {
+	Address string
+	// Ports   []uint16
+	Ports *deque.Deque
+}
 
-func Scan(ctx context.Context, myIP string, myPort uint16) (Hosts, error) {
+// var Deque deque.Deque
+
+func Scan(ctx context.Context, myIP string, myPort uint16) (*deque.Deque, error) {
 	scanner, err := nmap.NewScanner(
 		nmap.WithTargets("127.0.0.1", "192.168.1.0/24"),
-		nmap.WithPorts("8000,8001,8002,8003"),
+		nmap.WithPorts("8001,8002,8003"),
 		nmap.WithContext(ctx),
 	)
 	if err != nil {
@@ -63,7 +71,8 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (Hosts, error) {
 		return nil, err
 	}
 
-	hosts := Hosts{}
+	// hosts := Hosts{}
+	q := &deque.Deque{}
 	// Use the results to print an example output
 	for _, host := range result.Hosts {
 		if len(host.Ports) == 0 || len(host.Addresses) == 0 {
@@ -77,7 +86,7 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (Hosts, error) {
 		// continue
 		// }
 
-		ports := []uint16{}
+		ports := &deque.Deque{}
 
 		for _, port := range host.Ports {
 			fmt.Printf(
@@ -90,15 +99,24 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (Hosts, error) {
 			if port.Status() == nmap.Open {
 				if (hostAddress == myIP) && (port.ID == myPort) {
 				} else {
-					ports = append(ports, port.ID)
+					// ports = append(ports, strconv.Itoa(int(port.ID)))
+					ports.PushBack(strconv.Itoa(int(port.ID)))
 				}
 			}
 		}
 
-		if len(ports) != 0 {
-			for _, port := range ports {
-				hosts[hostAddress] = append(hosts[hostAddress], port)
+		if ports.Len() != 0 {
+			// for _, port := range ports {
+			// 	// hosts[hostAddress] = append(hosts[hostAddress], port)
+			// 	// ports = append(ports, port)
+			// }
+
+			host := Host{
+				Address: hostAddress,
+				Ports:   ports,
 			}
+
+			q.PushBack(host)
 		}
 	}
 
@@ -108,7 +126,7 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (Hosts, error) {
 		result.Stats.Finished.Elapsed,
 	)
 
-	return hosts, nil
+	return q, nil
 }
 
 func ScanMyIP(ctx context.Context, myIP string) (string, uint16, error) {
