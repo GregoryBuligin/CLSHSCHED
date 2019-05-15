@@ -14,6 +14,8 @@ message Empty {}
 // rpc GetInfo(Empty) returns (NodeInfo) {};
 message NodeInfo {
         int64 CPU = 1;
+        int64 Mem = 2;
+        int64 Disc = 3;
 }
 
 // rpc SchedTask(RecipeMsg) returns (Empty) {};

@@ -15,6 +15,7 @@ import (
 // GetNewClientGRPC is shortcut function for creation GRPC-client
 func GetNewClientGRPC(
 	ctx context.Context,
+	port int,
 ) (context.Context, *shsched.Client, error) {
 	address, err := netscanner.ExternalIP()
 	if err != nil {
@@ -27,7 +28,7 @@ func GetNewClientGRPC(
 	}
 
 	client, err := shsched.NewClient(&shsched.ClientConfig{
-		Address:   fmt.Sprintf("%s:%d", myHost, 8002),
+		Address:   fmt.Sprintf("%s:%d", myHost, port),
 		UseLogger: false,
 	})
 	if err != nil {
@@ -46,7 +47,7 @@ func SchedTaskCommandAction(c *cli.Context) (err error) {
 	}
 
 	// Get GRPC client
-	ctx, client, err := GetNewClientGRPC(context.Background())
+	ctx, client, err := GetNewClientGRPC(context.Background(), c.Int("port"))
 	if err != nil {
 		return err
 	}
@@ -58,7 +59,7 @@ func SchedTaskCommandAction(c *cli.Context) (err error) {
 	}
 
 	// GRPC-call
-	response, err := client.SchedTask(ctx, recipePath)
+	_, err = client.SchedTask(ctx, recipePath)
 	if err != nil {
 		statusCode, ok := status.FromError(err)
 		if ok {
@@ -68,7 +69,7 @@ func SchedTaskCommandAction(c *cli.Context) (err error) {
 		return err
 	}
 
-	fmt.Println(">>>", response)
+	fmt.Println(">>>", "Success sched")
 
 	return nil
 }

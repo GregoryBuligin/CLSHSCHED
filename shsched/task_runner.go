@@ -9,7 +9,6 @@ func StartRunner(server *Server, semaphore chan uint) {
 	for task := range server.TaskChan {
 		semaphore <- 1
 		go func(task Task, semaphore chan uint) {
-			fmt.Println("SERVER::", server.Port)
 			defer func() {
 				<-semaphore
 				os.RemoveAll(task.Dir)
@@ -19,8 +18,9 @@ func StartRunner(server *Server, semaphore chan uint) {
 			if err != nil {
 				panic(err)
 			}
+			fmt.Println("RUN HERE!!!")
 
-			fmt.Println("string(out) ||||||||||||||||||||", string(out))
+			fmt.Printf("OUTPUT for %s:\t%s\n", task.RetAddress, string(out))
 			server.CompleteTaskOutputChan <- Output{
 				RetAddress: task.RetAddress,
 				Output:     string(out),

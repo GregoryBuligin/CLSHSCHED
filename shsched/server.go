@@ -25,7 +25,8 @@ import (
 )
 
 type ServerConfig struct {
-	Port string
+	Port      string
+	UseLogger bool
 }
 
 type Server struct {
@@ -45,7 +46,14 @@ type Server struct {
 }
 
 func NewServer(cfg *ServerConfig) (*Server, error) {
-	logger := zerolog.New(os.Stderr).With().Str("role", "server").Timestamp().
+	var loggerOutput io.Writer
+	if cfg.UseLogger {
+		loggerOutput = os.Stderr
+	} else {
+		loggerOutput = ioutil.Discard
+	}
+
+	logger := zerolog.New(loggerOutput).With().Str("role", "server").Timestamp().
 		Caller().Logger()
 
 	myIP, err := netscanner.ExternalIP()
@@ -62,9 +70,6 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 
 	go func(scanChan chan deque.Deque, logger *zerolog.Logger) {
 		for {
-			time.Sleep(time.Minute * 1)
-			// time.Sleep(time.Second * 30)
-
 			networkHosts, err := netscanner.Scan(
 				context.Background(),
 				myIP,
@@ -85,6 +90,9 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 			} else {
 				scanChan <- *networkHosts
 			}
+
+			time.Sleep(time.Minute * 2)
+			// time.Sleep(time.Second * 30)
 		}
 	}(scanChan, &logger)
 
@@ -123,19 +131,12 @@ func (s *Server) getNewClient() (client *Client, err error) {
 	var address string
 	var port string
 
-	// panic(len(s.networkHosts))
-	fmt.Printf("getNewClient: %+v --> %d\n", s.networkHosts, s.networkHosts.Len())
-
 	if s.networkHosts.Len() > 0 {
 		func() {
-			fmt.Println("HERE!!!")
 			host := (s.networkHosts.PopFront()).(netscanner.Host)
 			defer s.networkHosts.PushBack(host)
 
-			// for k, v := range s.networkHosts {
-			// fmt.Println(k, s.networkIP)
-			// panic(k == s.networkIP)
-			fmt.Printf("my IP: %+v ||| k: %s\n", s.networkIP, host.Address)
+			fmt.Printf("my IP: %+v\n", s.networkIP)
 
 			if host.Address != s.networkIP {
 				if host.Ports.Len() > 0 {
@@ -144,7 +145,6 @@ func (s *Server) getNewClient() (client *Client, err error) {
 					savePorts := []string{}
 
 					for host.Ports.Len() != 0 {
-						fmt.Println("CYCLE")
 						p := (host.Ports.PopFront()).(string)
 						savePorts = append(savePorts, p)
 
@@ -165,7 +165,7 @@ func (s *Server) getNewClient() (client *Client, err error) {
 		port = s.Port
 	}
 
-	fmt.Printf(">>>>>>>>>>>>> %s:%s\n", address, port)
+	fmt.Printf("Task will exec on %s:%s\n", address, port)
 
 	client, err = NewClient(&ClientConfig{
 		Address:    fmt.Sprintf("%s:%s", address, port),
@@ -297,26 +297,26 @@ func (s *Server) SchedTask(ctx context.Context, in *RecipeMsg) (*Empty, error) {
 
 func (s *Server) OutputWaiter() {
 	s.logger.Debug().Msg("run OutputWaiter")
-	for _ = range s.CompleteTaskOutputChan {
+	for output := range s.CompleteTaskOutputChan {
 		s.logger.Debug().Msg("USE>>> OutputWaiter")
-		fmt.Println("USE>>> OutputWaiter")
+		// fmt.Println("USE>>> OutputWaiter")
 
-		// client, err := s.getNewClient()
-		// if err != nil {
-		// 	s.logger.Error().Err(err).Msg("getNewClient error")
-		// 	panic(err)
-		// }
-		// defer client.Close()
-		// client.address = output.RetAddress
-		// // panic(client.address)
-		//
-		// _, err = client.Ret(context.Background(), &ExecOutput{
-		// 	Output: output.Output,
-		// })
-		// if err != nil {
-		// 	s.logger.Error().Err(err).Msg("getNewClient error")
-		// 	panic(err)
-		// }
+		client, err := s.getNewClient()
+		if err != nil {
+			s.logger.Error().Err(err).Msg("getNewClient error")
+			panic(err)
+		}
+		defer client.Close()
+		client.address = output.RetAddress
+		// panic(client.address)
+
+		_, err = client.Ret(context.Background(), &ExecOutput{
+			Output: output.Output,
+		})
+		if err != nil {
+			s.logger.Error().Err(err).Msg("getNewClient error")
+			panic(err)
+		}
 	}
 }
 
@@ -335,7 +335,6 @@ func (s *Server) SelectTask() (err error) {
 
 	for task := range s.WaitTaskChan {
 		s.logger.Debug().Msg("USE>>> SelectTask")
-		fmt.Println("USE>>> SelectTask")
 
 		client, err := s.getNewClient()
 		if err != nil {

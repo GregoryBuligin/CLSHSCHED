@@ -164,7 +164,7 @@ func (c *Client) Exec(
 		c.logger.Error().Err(err).Msg("Exec error")
 		return err
 	}
-	fmt.Println("!!!", status.Message)
+	fmt.Println(status.Message)
 
 	return nil
 }

@@ -50,13 +50,14 @@ func ExternalIP() (string, error) {
 
 type Host struct {
 	Address string
-	// Ports   []uint16
-	Ports *deque.Deque
+	Ports   *deque.Deque
 }
 
-// var Deque deque.Deque
-
-func Scan(ctx context.Context, myIP string, myPort uint16) (*deque.Deque, error) {
+func Scan(
+	ctx context.Context,
+	myIP string,
+	myPort uint16,
+) (*deque.Deque, error) {
 	scanner, err := nmap.NewScanner(
 		nmap.WithTargets("127.0.0.1", "192.168.1.0/24"),
 		nmap.WithPorts("8001,8002,8003"),
@@ -71,7 +72,6 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (*deque.Deque, error)
 		return nil, err
 	}
 
-	// hosts := Hosts{}
 	q := &deque.Deque{}
 	// Use the results to print an example output
 	for _, host := range result.Hosts {
@@ -79,12 +79,7 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (*deque.Deque, error)
 			continue
 		}
 
-		// fmt.Printf("Host %q:\n", host.Addresses[0])
-
 		hostAddress := fmt.Sprintf("%s", host.Addresses[0])
-		// if (hostAddress == myIP) {
-		// continue
-		// }
 
 		ports := &deque.Deque{}
 
@@ -99,17 +94,12 @@ func Scan(ctx context.Context, myIP string, myPort uint16) (*deque.Deque, error)
 			if port.Status() == nmap.Open {
 				if (hostAddress == myIP) && (port.ID == myPort) {
 				} else {
-					// ports = append(ports, strconv.Itoa(int(port.ID)))
 					ports.PushBack(strconv.Itoa(int(port.ID)))
 				}
 			}
 		}
 
 		if ports.Len() != 0 {
-			// for _, port := range ports {
-			// 	// hosts[hostAddress] = append(hosts[hostAddress], port)
-			// 	// ports = append(ports, port)
-			// }
 
 			host := Host{
 				Address: hostAddress,
